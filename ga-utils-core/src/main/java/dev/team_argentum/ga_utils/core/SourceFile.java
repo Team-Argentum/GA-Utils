@@ -16,7 +16,7 @@ public record SourceFile(String path, String content) {
     }
 
     public void writeTo(Path root) {
-        Path target = root.resolve(path.replace('/', '\\'));
+        Path target = root.resolve(path);
         try {
             Files.createDirectories(target.getParent());
             Files.writeString(target, content, StandardCharsets.UTF_8);

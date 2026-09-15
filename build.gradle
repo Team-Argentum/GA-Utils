@@ -1,6 +1,6 @@
 allprojects {
-    group = 'com.github.team-argentum.GAUtils'
-    version = '1.0-SNAPSHOT'
+    group = 'com.github.Team-Argentum.GAUtils'
+    version = providers.gradleProperty('version').getOrElse('1.0-SNAPSHOT')
     repositories {
         mavenCentral()
     }
@@ -15,5 +15,32 @@ subprojects {
 
     tasks.withType(Test).configureEach {
         useJUnitPlatform()
+    }
+}
+
+import org.gradle.api.tasks.GradleBuild
+
+tasks.register('publishPluginToMavenLocal', GradleBuild) {
+    group = 'publishing'
+    tasks = ['publishToMavenLocal']
+    def pluginDir = file('ga-utils-tools/gradle-plugin')
+    def forwarded = gradle.startParameter.newInstance()
+    forwarded.projectProperties.putAll(gradle.startParameter.projectProperties)
+    forwarded.projectDir = pluginDir
+    forwarded.currentDir = pluginDir
+    startParameter = forwarded
+}
+
+tasks.register('publishToMavenLocal') {
+    group = 'publishing'
+    description = 'Publishes all library modules and the Gradle plugin to the local Maven repository.'
+    dependsOn tasks.named('publishPluginToMavenLocal')
+}
+
+subprojects {
+    plugins.withId('maven-publish') {
+        tasks.matching { it.name == 'publishToMavenLocal' }.configureEach { subTask ->
+            rootProject.tasks.named('publishToMavenLocal').configure { it.dependsOn subTask }
+        }
     }
 }
