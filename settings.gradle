@@ -1,0 +1,11 @@
+pluginManagement {
+    includeBuild 'ga-utils-tools/gradle-plugin'
+}
+
+rootProject.name = 'GAUtils'
+
+include 'ga-utils-api'
+include 'ga-utils-core'
+include 'ga-utils-processors:struct'
+include 'ga-utils-examples'
+

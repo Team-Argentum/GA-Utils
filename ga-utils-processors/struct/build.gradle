@@ -1,0 +1,34 @@
+plugins {
+    id 'java'
+    id 'application'
+    id 'maven-publish'
+}
+
+dependencies {
+    implementation project(':ga-utils-api')
+    implementation project(':ga-utils-core')
+
+    implementation 'com.github.javaparser:javaparser-core:3.28.1'
+
+    testImplementation platform('org.junit:junit-bom:5.10.0')
+    testImplementation 'org.junit.jupiter:junit-jupiter'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+}
+
+application {
+    mainClass = 'dev.team_argentum.ga_utils.struct.CliMain'
+}
+
+tasks.withType(Test).configureEach {
+    systemProperty 'gautils.test.classpath', sourceSets.test.runtimeClasspath.asPath
+}
+
+publishing {
+    publications {
+        maven(MavenPublication) {
+            artifactId = 'ga-utils-processor-struct'
+            from components.java
+        }
+    }
+}
+

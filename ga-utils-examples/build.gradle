@@ -1,0 +1,18 @@
+plugins {
+    id 'java'
+    id 'dev.team_argentum.ga-utils'
+}
+
+dependencies {
+    annotationProcessor project(':ga-utils-processors:struct')
+    implementation project(':ga-utils-api')
+
+    testImplementation platform('org.junit:junit-bom:5.10.0')
+    testImplementation 'org.junit.jupiter:junit-jupiter'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+}
+
+gautils {
+    backend = 'flatten'
+}
+
