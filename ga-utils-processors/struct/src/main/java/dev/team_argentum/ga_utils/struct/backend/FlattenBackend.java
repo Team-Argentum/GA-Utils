@@ -10,6 +10,7 @@ import com.github.javaparser.ast.expr.AssignExpr;
 import com.github.javaparser.ast.expr.Expression;
 import com.github.javaparser.ast.expr.MethodCallExpr;
 import com.github.javaparser.ast.expr.NameExpr;
+import com.github.javaparser.ast.expr.ObjectCreationExpr;
 import com.github.javaparser.ast.expr.UnaryExpr;
 import com.github.javaparser.ast.stmt.BlockStmt;
 import com.github.javaparser.ast.visitor.ModifierVisitor;
@@ -83,38 +84,62 @@ public class FlattenBackend extends AbstractJavaParserBackend {
 
     @Override
     protected boolean supportsFieldLocalExpansion(StructIr s) {
-        return s.fields.stream().allMatch(f -> !f.scalar);
+        return true;
     }
 
     @Override
     protected Node expandFieldLocalDeclaration(CallerRewriter rewriter,
                                                com.github.javaparser.ast.stmt.ExpressionStmt stmt,
-                                               com.github.javaparser.ast.expr.VariableDeclarationExpr decl,
-                                               com.github.javaparser.ast.body.VariableDeclarator d, StructIr s) {
-        String varName = d.getNameAsString();
-        List<VariableDeclarator> decls = new ArrayList<>();
-        for (FieldIr f : s.fields) {
-            VariableDeclarator nd = new VariableDeclarator(StaticJavaParser.parseType(f.type), varName + "_" + f.name);
-            if (d.getInitializer().isPresent()) {
-                nd.setInitializer(new com.github.javaparser.ast.expr.NullLiteralExpr());
+                                               com.github.javaparser.ast.expr.VariableDeclarationExpr decl, StructIr s) {
+        List<com.github.javaparser.ast.stmt.Statement> expanded = new ArrayList<>();
+        for (VariableDeclarator d : decl.getVariables()) {
+            String varName = d.getNameAsString();
+            Expression init = d.getInitializer().orElse(null);
+            for (FieldIr f : s.fields) {
+                VariableDeclarator nd = new VariableDeclarator(StaticJavaParser.parseType(f.type), varName + "_" + f.name);
+                if (init instanceof ObjectCreationExpr oce && rewriter.structByType(oce.getType().asString()) == s) {
+                    nd.setInitializer(defaultValue(f.type));
+                } else if (init instanceof NameExpr ne && rewriter.vars.get(ne.getNameAsString()) == s) {
+                    nd.setInitializer(new NameExpr(ne.getNameAsString() + "_" + f.name));
+                } else if (init != null) {
+                    rewriter.problems.error(rewriter.path, StructFrontend.line(stmt),
+                            "unsupported initializer for @Struct local '" + varName + "' of struct " + s.name);
+                }
+                expanded.add(new com.github.javaparser.ast.stmt.ExpressionStmt(
+                        new com.github.javaparser.ast.expr.VariableDeclarationExpr(new NodeList<>(nd))));
             }
-            decls.add(nd);
+            rewriter.vars.put(varName, s);
+            rewriter.structLocals.add(varName);
         }
-        stmt.setExpression(new com.github.javaparser.ast.expr.VariableDeclarationExpr(new NodeList<>(decls.get(0))));
-        if (decls.size() > 1 && stmt.getParentNode().orElse(null) instanceof com.github.javaparser.ast.stmt.BlockStmt parent) {
+        stmt.setExpression(((com.github.javaparser.ast.stmt.ExpressionStmt) expanded.get(0)).getExpression());
+        if (expanded.size() > 1 && stmt.getParentNode().orElse(null) instanceof com.github.javaparser.ast.stmt.BlockStmt parent) {
             com.github.javaparser.ast.NodeList<com.github.javaparser.ast.stmt.Statement> list = parent.getStatements();
             int idx = list.indexOf(stmt);
-            for (int i = 1; i < decls.size(); i++) {
-                list.add(idx + i, new com.github.javaparser.ast.stmt.ExpressionStmt(
-                        new com.github.javaparser.ast.expr.VariableDeclarationExpr(new NodeList<>(decls.get(i)))));
+            for (int i = 1; i < expanded.size(); i++) {
+                list.add(idx + i, expanded.get(i));
             }
         }
-        rewriter.vars.put(varName, s);
         return stmt;
     }
 
+    protected static Expression defaultValue(String type) {
+        if (type.contains("[]")) {
+            return new com.github.javaparser.ast.expr.NullLiteralExpr();
+        }
+        String t = type.trim();
+        if (t.equals("boolean")) {
+            return new com.github.javaparser.ast.expr.BooleanLiteralExpr(false);
+        }
+        if (t.equals("byte") || t.equals("short") || t.equals("int") || t.equals("long")
+                || t.equals("float") || t.equals("double") || t.equals("char")) {
+            return new com.github.javaparser.ast.expr.IntegerLiteralExpr("0");
+        }
+        return new com.github.javaparser.ast.expr.NullLiteralExpr();
+    }
+
     @Override
-    protected void fieldWriteCheck(Node fieldAccessNode, StructIr s, FieldIr f, ProblemCollector problems, String path) {
+    protected void fieldWriteCheck(Node fieldAccessNode, StructIr s, FieldIr f, boolean isLocalVar,
+                                   ProblemCollector problems, String path) {
         Node parent = fieldAccessNode.getParentNode().orElse(null);
         boolean write = false;
         if (parent instanceof AssignExpr ae && ae.getTarget() == fieldAccessNode) {
@@ -122,10 +147,10 @@ public class FlattenBackend extends AbstractJavaParserBackend {
         } else if (parent instanceof UnaryExpr ue && isIncDec(ue.getOperator()) && ue.getExpression() == fieldAccessNode) {
             write = true;
         }
-        if (write && f.scalar) {
+        if (write && f.scalar && !isLocalVar) {
             problems.error(path, StructFrontend.line(fieldAccessNode),
                     "flatten backend cannot persist a write to scalar field '" + f.name + "' of struct " + s.name
-                            + " (use the soa backend, or the ssa backend)");
+                            + " (the value would not survive the call boundary; use the soa or ssa backend)");
         }
     }
 

@@ -80,9 +80,8 @@ public final class DispatchCallerBackend extends AbstractJavaParserBackend {
     @Override
     protected Node expandFieldLocalDeclaration(CallerRewriter rewriter,
                                                com.github.javaparser.ast.stmt.ExpressionStmt stmt,
-                                               com.github.javaparser.ast.expr.VariableDeclarationExpr decl,
-                                               com.github.javaparser.ast.body.VariableDeclarator d, StructIr s) {
-        return target(s).expandFieldLocalDeclaration(rewriter, stmt, decl, d, s);
+                                               com.github.javaparser.ast.expr.VariableDeclarationExpr decl, StructIr s) {
+        return target(s).expandFieldLocalDeclaration(rewriter, stmt, decl, s);
     }
 
     @Override
@@ -106,8 +105,8 @@ public final class DispatchCallerBackend extends AbstractJavaParserBackend {
     }
 
     @Override
-    protected void fieldWriteCheck(Node fieldAccessNode, StructIr s, FieldIr f, ProblemCollector problems, String path) {
-        target(s).fieldWriteCheck(fieldAccessNode, s, f, problems, path);
+    protected void fieldWriteCheck(Node fieldAccessNode, StructIr s, FieldIr f, boolean isLocalVar, ProblemCollector problems, String path) {
+        target(s).fieldWriteCheck(fieldAccessNode, s, f, isLocalVar, problems, path);
     }
 
     @Override

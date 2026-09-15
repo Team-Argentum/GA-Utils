@@ -29,7 +29,7 @@ public final class SsaBackend extends FlattenBackend {
     }
 
     @Override
-    protected void fieldWriteCheck(Node fieldAccessNode, StructIr s, FieldIr f, ProblemCollector problems, String path) {
+    protected void fieldWriteCheck(Node fieldAccessNode, StructIr s, FieldIr f, boolean isLocalVar, ProblemCollector problems, String path) {
     }
 
     @Override

@@ -24,8 +24,10 @@ import dev.team_argentum.ga_utils.struct.ir.StructIr;
 
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 public abstract class AbstractJavaParserBackend implements StructBackend {
 
@@ -57,7 +59,8 @@ public abstract class AbstractJavaParserBackend implements StructBackend {
         return null;
     }
 
-    protected void fieldWriteCheck(Node fieldAccessNode, StructIr s, FieldIr f, ProblemCollector problems, String path) {
+    protected void fieldWriteCheck(Node fieldAccessNode, StructIr s, FieldIr f, boolean isLocalVar,
+                                   ProblemCollector problems, String path) {
     }
 
     protected CallerRewriter createCallerRewriter(Map<String, StructIr> catalog, ProblemCollector problems, String path) {
@@ -91,8 +94,7 @@ public abstract class AbstractJavaParserBackend implements StructBackend {
     }
 
     protected Node expandFieldLocalDeclaration(CallerRewriter rewriter, com.github.javaparser.ast.stmt.ExpressionStmt stmt,
-                                               com.github.javaparser.ast.expr.VariableDeclarationExpr decl,
-                                               com.github.javaparser.ast.body.VariableDeclarator d, StructIr s) {
+                                               com.github.javaparser.ast.expr.VariableDeclarationExpr decl, StructIr s) {
         return null;
     }
 
@@ -102,6 +104,7 @@ public abstract class AbstractJavaParserBackend implements StructBackend {
         protected final ProblemCollector problems;
         protected final String path;
         protected final Map<String, StructIr> vars = new HashMap<>();
+        protected final Set<String> structLocals = new HashSet<>();
 
         protected CallerRewriter(AbstractJavaParserBackend backend, Map<String, StructIr> catalog,
                                  ProblemCollector problems, String path) {
@@ -113,6 +116,7 @@ public abstract class AbstractJavaParserBackend implements StructBackend {
 
         public void rewriteMethod(MethodDeclaration md) {
             vars.clear();
+            structLocals.clear();
             StructIr returnType = structByType(md.getType().asString());
             if (returnType != null) {
                 problems.error(path, StructFrontend.line(md),
@@ -153,11 +157,12 @@ public abstract class AbstractJavaParserBackend implements StructBackend {
         @Override
         public Node visit(ExpressionStmt n, Void arg) {
             if (n.getExpression() instanceof com.github.javaparser.ast.expr.VariableDeclarationExpr decl
-                    && decl.getVariables().size() == 1) {
-                VariableDeclarator d = decl.getVariables().get(0);
-                StructIr s = structByType(d.getType().asString());
-                if (s != null && backend.supportsFieldLocalExpansion(s)) {
-                    Node replacement = backend.expandFieldLocalDeclaration(this, n, decl, d, s);
+                    && !decl.getVariables().isEmpty()) {
+                StructIr s = structByType(decl.getVariables().get(0).getType().asString());
+                boolean allSameStruct = decl.getVariables().stream()
+                        .allMatch(d -> structByType(d.getType().asString()) == s);
+                if (s != null && allSameStruct && backend.supportsFieldLocalExpansion(s)) {
+                    Node replacement = backend.expandFieldLocalDeclaration(this, n, decl, s);
                     if (replacement != null) {
                         return replacement;
                     }
@@ -226,7 +231,7 @@ public abstract class AbstractJavaParserBackend implements StructBackend {
                                 "unknown field '" + n.getNameAsString() + "' on struct " + s.name);
                         return n;
                     }
-                    backend.fieldWriteCheck(n, s, f, problems, path);
+                    backend.fieldWriteCheck(n, s, f, structLocals.contains(scopeName.getNameAsString()), problems, path);
                     return backend.fieldExpr(s, scopeName.getNameAsString(), f);
                 }
             }

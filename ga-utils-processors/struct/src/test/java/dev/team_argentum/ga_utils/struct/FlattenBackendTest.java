@@ -112,6 +112,47 @@ class FlattenBackendTest {
     }
 
     @Test
+    void scalarStructLocalsExpandUnderFlatten() {
+        TransformResult r = run("flatten", """
+                package test;
+
+                import dev.team_argentum.ga_utils.api.Struct;
+
+                @Struct
+                class Vec {
+                    public float x;
+                    public float y;
+                }
+
+                class T {
+                    static void run() {
+                        Vec vec = new Vec();
+                        vec.x = 10;
+                        vec.y = 10;
+                        Vec vec2 = new Vec();
+                        vec2.x = 5;
+                        vec2.y = 4;
+                        System.out.println(test2(vec, vec2));
+                    }
+
+                    public static float test2(Vec a, Vec b) {
+                        return (a.x + b.x) * (a.y + b.y);
+                    }
+                }
+                """);
+        r.diagnostics().forEach(d -> System.out.println(d));
+        assertFalse(r.hasErrors());
+
+        var caller = r.output("Src0.java").orElseThrow();
+        assertTrue(caller.content().contains("float vec_x = 0;"));
+        assertTrue(caller.content().contains("float vec2_y = 0;"));
+        assertTrue(caller.content().contains("vec_x = 10;"));
+        assertTrue(caller.content().contains("vec2_y = 4;"));
+        assertTrue(caller.content().contains("System.out.println(test2(vec_x, vec_y, vec2_x, vec2_y));"));
+        assertTrue(caller.content().contains("public static float test2(float a_x, float a_y, float b_x, float b_y)"));
+    }
+
+    @Test
     void rejectsScalarMutation() {
         String src = """
                 package test;
